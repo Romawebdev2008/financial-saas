@@ -55,7 +55,7 @@
    * "ح+ن" أو "ح ن" -> 1 حضور + 1 نبطشية في نفس اليوم
    * "ح+س" أو "ح+س3" -> 1 حضور + 3 ساعات سهر في نفس اليوم
    * "ح+ن+س2" -> 1 حضور + 1 نبطشية + 2 سهر
-   * "غ" -> غياب | "إ" أو "ا" -> إجازة | "م" -> مأمورية | "ع" أو "ر" -> عطلة/راحة
+   * "غ" -> غياب | "إ" أو "ا" -> إجازة | "م" -> مأمورية | "ر" -> راحة | "ع" -> عطلة
    */
   function parseDayCell(rawVal, sheetSettings) {
     const settings = Object.assign({
@@ -71,6 +71,7 @@
       absent: 0,
       leave: 0,
       mission: 0,
+      rest: 0,
       off: 0,
       cssClass: ""
     };
@@ -146,15 +147,23 @@
         continue;
       }
 
-      // فحص العطلة / الراحة "ع" أو "ر"
-      if (/^(ع|ر|راحة|عطلة)$/.test(tk)) {
-        res.off += 1;
+      // فحص الراحة "ر" أو "راحة" منفصلة
+      if (/^(ر(\d+(\.\d+)?)?|راحة|راحه)$/.test(tk)) {
+        const m = tk.match(/^ر(\d+(\.\d+)?)?$/);
+        res.rest += m && m[1] ? parseFloat(m[1]) : 1;
+        continue;
+      }
+
+      // فحص العطلة "ع" أو "عطلة" منفصلة
+      if (/^(ع(\d+(\.\d+)?)?|عطلة|عطله)$/.test(tk)) {
+        const m = tk.match(/^ع(\d+(\.\d+)?)?$/);
+        res.off += m && m[1] ? parseFloat(m[1]) : 1;
         continue;
       }
 
       // في حال كتب المستخدم حروفاً ملتصقة بدون فاصل مثل "حن" أو "حس2"
       if (tk.length > 1 && /[حنس]/.test(tk)) {
-        const subMatches = tk.match(/[حنسغإامع](\d+(\.\d+)?)?/g);
+        const subMatches = tk.match(/[حنسغإامعر](\d+(\.\d+)?)?/g);
         if (subMatches && subMatches.length > 1) {
           const subRes = parseDayCell(subMatches.join("+"), settings);
           res.att += subRes.att;
@@ -163,6 +172,7 @@
           res.absent += subRes.absent;
           res.leave += subRes.leave;
           res.mission += subRes.mission;
+          res.rest += subRes.rest;
           res.off += subRes.off;
           if (subRes.att > 0) hasAtt = true;
           if (subRes.shift > 0) hasShift = true;
@@ -182,6 +192,7 @@
     else if (res.absent > 0) res.cssClass = "code-absent";
     else if (res.leave > 0) res.cssClass = "code-leave";
     else if (res.mission > 0) res.cssClass = "code-mission";
+    else if (res.rest > 0) res.cssClass = "code-rest";
     else if (res.off > 0) res.cssClass = "code-off";
 
     return res;
@@ -220,6 +231,8 @@
     cols.push({ key: "tot_ot", title: "إجمالي السهر", kind: "calc_count", headerClass: "hdr-ot", cellClass: "col-summary-ot", editable: false });
     cols.push({ key: "tot_abs", title: "الغياب", kind: "calc_count", cellClass: "col-summary-abs", editable: false });
     cols.push({ key: "tot_leave", title: "الإجازات", kind: "calc_count", cellClass: "col-money-calc", editable: false });
+    cols.push({ key: "tot_rest", title: "الراحة", kind: "calc_count", cellClass: "col-money-calc", editable: false });
+    cols.push({ key: "tot_off", title: "العطلة", kind: "calc_count", cellClass: "col-money-calc", editable: false });
 
     // أعمدة الفئات المالية والمستحقات التلقائية
     cols.push({ key: "rate_att", title: "فئة يوم الحضور", kind: "rate", headerClass: "hdr-fin", cellClass: "col-rate", editable: true });
@@ -427,6 +440,8 @@
       let totOt = 0;
       let totAbs = 0;
       let totLeave = 0;
+      let totRest = 0;
+      let totOff = 0;
 
       for (let d = 1; d <= daysCount; d++) {
         const k = "d_" + d;
@@ -437,6 +452,8 @@
         totOt += parsed.overtime;
         totAbs += parsed.absent;
         totLeave += parsed.leave;
+        totRest += parsed.rest;
+        totOff += parsed.off;
         computedRowMaps[rIdx][k] = rawDay;
         if (parsed.cssClass) {
           cellClasses[rIdx][k] = parsed.cssClass;
@@ -451,6 +468,8 @@
       computedRowMaps[rIdx].tot_ot = round2(totOt);
       computedRowMaps[rIdx].tot_abs = round2(totAbs);
       computedRowMaps[rIdx].tot_leave = round2(totLeave);
+      computedRowMaps[rIdx].tot_rest = round2(totRest);
+      computedRowMaps[rIdx].tot_off = round2(totOff);
     });
 
     // دالة مساعدة لحل المعادلات في خلايا الأسعار/المكافآت/الخصومات
@@ -527,7 +546,7 @@
       totalsMap[k] = dayActiveCount > 0 ? dayActiveCount : "";
     }
 
-    const sumKeys = ["tot_att", "tot_shift", "tot_ot", "tot_abs", "tot_leave", "amt_att", "amt_shift", "amt_ot", "bonus", "deduct", "net_total"];
+    const sumKeys = ["tot_att", "tot_shift", "tot_ot", "tot_abs", "tot_leave", "tot_rest", "tot_off", "amt_att", "amt_shift", "amt_ot", "bonus", "deduct", "net_total"];
     sumKeys.forEach(function (sk) {
       let s = 0;
       for (let r = 0; r < rows.length; r++) {
@@ -681,7 +700,7 @@
   function buildReadableSummaryForCloud(sheet) {
     if (!sheet || sheet.type !== "unified") return null;
     const calc = computeSheetMatrix(sheet);
-    const summaryKeys = ["code", "name", "dept", "tot_att", "tot_shift", "tot_ot", "tot_abs", "tot_leave", "amt_att", "amt_shift", "amt_ot", "bonus", "deduct", "net_total", "notes"];
+    const summaryKeys = ["code", "name", "dept", "tot_att", "tot_shift", "tot_ot", "tot_abs", "tot_leave", "tot_rest", "tot_off", "amt_att", "amt_shift", "amt_ot", "bonus", "deduct", "net_total", "notes"];
     const keyToIdx = {};
     calc.cols.forEach(function (c, i) { keyToIdx[c.key] = i; });
 

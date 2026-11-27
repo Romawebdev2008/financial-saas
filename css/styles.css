@@ -818,6 +818,7 @@ button, input, select, textarea {
 .code-absent { background-color: #fef2f2 !important; color: #dc2626 !important; }
 .code-leave { background-color: #f5f3ff !important; color: #6d28d9 !important; }
 .code-mission { background-color: #f0f9ff !important; color: #0369a1 !important; }
+.code-rest { background-color: #ecfeff !important; color: #0e7490 !important; }
 .code-off { background-color: #f1f5f9 !important; color: #64748b !important; }
 
 /* أعمدة التجميع والحساب المالي */
