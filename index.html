@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>نظام الحضور والنبطشيات والسهر الموحد - واجهة إكسيل المتزامنة</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- ========================================================================
+       1. صفحة تسجيل الدخول وإنشاء الحساب (Auth Screen)
+       ======================================================================== -->
+  <section id="authScreen" class="auth-screen">
+    <div class="auth-container">
+      <div class="auth-hero">
+        <div>
+          <div class="auth-brand">
+            <div class="auth-logo-box">XL</div>
+            <div>
+              <h1>نظام الحضور والنبطشيات والسهر</h1>
+              <p>واجهة إكسيل مالية داخلية متكاملة بمزامنة سحابية متعددة الأجهزة</p>
+            </div>
+          </div>
+
+          <ul class="auth-features">
+            <li>
+              <span class="feat-icon">📊</span>
+              <span><strong>ورقة واحدة شاملة:</strong> تجمع أيام الشهر (1-31) للحضور والنبطشيات والسهر (مثل <code>ح</code>، <code>ن</code>، <code>س2</code>، <code>ح+ن</code>، <code>ح+س3</code>) مع التجميع والحساب المالي التلقائي.</span>
+            </li>
+            <li>
+              <span class="feat-icon">⚡</span>
+              <span><strong>واجهة إكسيل احترافية:</strong> شريط صيغة <code>fx</code> ومعادلات، سحب مقبض التعبئة، نسخ ولصق مباشر مع Excel، وتصدير ملفات <code>.xls</code> وطباعة رسمية.</span>
+            </li>
+            <li>
+              <span class="feat-icon">🔄</span>
+              <span><strong>مزامنة لنفس المستخدم على أكثر من جهاز:</strong> سجل دخولك بنفس الحساب من الكمبيوتر أو اللابتوب أو الموبايل لتظهر بياناتك وتتحدث تلقائياً عبر Google Sheets.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="auth-cloud-pill">
+          <span id="authCloudStatusText">☁️ فحص حالة الربط السحابي...</span>
+          <button type="button" id="btnOpenCloudFromAuth">⚙️ إعداد السحابة</button>
+        </div>
+      </div>
+
+      <div class="auth-form-pane">
+        <div class="auth-tabs">
+          <button type="button" id="tabLogin" class="auth-tab active">تسجيل الدخول</button>
+          <button type="button" id="tabRegister" class="auth-tab">إنشاء حساب جديد</button>
+        </div>
+
+        <div id="authAlert" class="auth-alert error hidden"></div>
+
+        <form id="authForm" autocomplete="on">
+          <div id="registerNameGroup" class="form-group hidden">
+            <label for="inpDisplayName">الاسم الكامل / اسم الإدارة</label>
+            <input type="text" id="inpDisplayName" class="form-control" placeholder="مثال: أ. محمد - الإدارة المالية" />
+          </div>
+
+          <div class="form-group">
+            <label for="inpUsername">اسم المستخدم (الموحد عبر أجهزتك)</label>
+            <input type="text" id="inpUsername" class="form-control ltr-input" placeholder="e.g. admin_finance" required />
+          </div>
+
+          <div class="form-group">
+            <label for="inpPassword">كلمة المرور</label>
+            <input type="password" id="inpPassword" class="form-control ltr-input" placeholder="••••••••" required />
+          </div>
+
+          <button type="submit" id="btnSubmitAuth" class="btn-primary-auth">تسجيل الدخول وفتح الشيت</button>
+        </form>
+
+        <div class="auth-mode-note">
+          💡 <strong>معلومة سريعة:</strong> يمكنك البدء فوراً الآن، وعند لصق رابط <strong>Google Apps Script</strong> من زر (إعداد السحابة) ستتم مزامنة حسابك وجداولك تلقائياً بين جميع أجهزتك مجاناً.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       2. واجهة الإكسيل الداخلية المتكاملة (Internal Excel Workspace)
+       ======================================================================== -->
+  <main id="workspaceScreen" class="workspace-screen hidden">
+
+    <!-- الشريط العلوي الأخضر -->
+    <header class="excel-topbar">
+      <div class="topbar-right">
+        <div class="app-badge">
+          <span class="app-badge-icon">X</span>
+          <span>شيت الحضور والنبطشيات والسهر</span>
+        </div>
+        <input type="text" id="inpWorkbookTitle" class="workbook-title-input" title="اسم السجل / المصنف" />
+        <div id="syncStatusPill" class="sync-pill local" title="اضغط لإعدادات المزامنة السحابية عبر الأجهزة">
+          <span class="sync-dot"></span>
+          <span id="syncStatusText">محفوظ محلياً</span>
+        </div>
+      </div>
+
+      <div class="topbar-left">
+        <button type="button" id="btnSyncNow" class="top-btn" title="حفظ ومزامنة الآن (Ctrl+S)">🔄 مزامنة الآن</button>
+        <button type="button" id="btnOpenCloudModal" class="top-btn">☁️ ربط الأجهزة</button>
+        <div id="lblCurrentUser" class="user-chip">👤 مستخدم</div>
+        <button type="button" id="btnLogout" class="top-btn" title="تسجيل الخروج">خروج</button>
+      </div>
+    </header>
+
+    <!-- شريط أدوات الإكسيل (Ribbon) -->
+    <section class="excel-ribbon">
+      <div class="ribbon-group">
+        <button type="button" id="btnUndo" class="rb-btn" title="تراجع (Ctrl+Z)">↩ تراجع</button>
+        <button type="button" id="btnRedo" class="rb-btn" title="إعادة (Ctrl+Y)">↪ إعادة</button>
+      </div>
+
+      <div class="ribbon-group">
+        <span class="ribbon-label">الفترة:</span>
+        <select id="selMonth" class="rb-select" title="شهر الكشف"></select>
+        <input type="number" id="inpYear" class="rb-select" style="width: 74px;" min="2020" max="2099" value="2026" title="السنة" />
+        <button type="button" id="btnToggleDays" class="rb-btn" title="إخفاء أو إظهار أعمدة أيام 1-31 للتركيز على الملخص المالي">📅 طي أيام الشهر</button>
+      </div>
+
+      <div class="ribbon-group">
+        <button type="button" id="btnAddRow" class="rb-btn">+ موظف</button>
+        <button type="button" id="btnAdd5Rows" class="rb-btn">+ 5 صفوف</button>
+        <button type="button" id="btnDeleteRow" class="rb-btn" style="color:#b91c1c;">🗑 حذف صف</button>
+      </div>
+
+      <div class="ribbon-group">
+        <button type="button" id="btnBoldCell" class="rb-btn" title="خط عريض"><strong>B</strong></button>
+        <label class="rb-btn" title="لون خلفية الخلية" style="cursor:pointer;">
+          🎨 لون <input type="color" id="inpCellBg" value="#fef9c3" style="width:18px;height:18px;border:none;background:none;cursor:pointer;" />
+        </label>
+        <button type="button" id="btnClearFormat" class="rb-btn" title="مسح التنسيق اللوني">مسح تنسيق</button>
+      </div>
+
+      <div class="ribbon-group">
+        <button type="button" id="btnOpenRatesModal" class="rb-btn primary-tint">💰 أسعار النبطشيات والسهر وقواعد الحساب</button>
+        <button type="button" id="btnCloneNextMonth" class="rb-btn" title="إنشاء ورقة للشهر التالي بنفس أسماء الموظفين والأسعار">📑 ترحيل لشهر جديد</button>
+      </div>
+
+      <div class="ribbon-group">
+        <button type="button" id="btnExportExcel" class="rb-btn primary-tint">📥 تصدير Excel (.xls)</button>
+        <button type="button" id="btnExportCsv" class="rb-btn">CSV</button>
+        <button type="button" id="btnImportCsv" class="rb-btn">📤 استيراد</button>
+        <input type="file" id="fileImportCsv" accept=".csv,.txt" class="hidden" />
+        <button type="button" id="btnPrintSheet" class="rb-btn">🖨 طباعة رسمية</button>
+      </div>
+    </section>
+
+    <!-- شريط الأختام السريعة للحضور والنبطشيات والسهر + مؤشرات الملخص -->
+    <section class="stamp-bar">
+      <div class="stamp-items">
+        <button type="button" id="btnToggleBrushMode" class="rb-btn" title="عند التفعيل يمكنك النقر المباشر بالماوس على خلايا الأيام لتسجيل الرمز فوراً">🖌 ختم بالنقر</button>
+        <div id="stampButtonsContainer" class="stamp-items"></div>
+      </div>
+
+      <div id="kpiStrip" class="kpi-strip">
+        <span class="kpi-mini">الموظفون: <strong id="kpiEmpCount">0</strong></span>
+        <span class="kpi-mini" style="color:#065f46;">أيام الحضور: <strong id="kpiTotAtt">0</strong></span>
+        <span class="kpi-mini" style="color:#1e40af;">النبطشيات: <strong id="kpiTotShift">0</strong></span>
+        <span class="kpi-mini" style="color:#92400e;">ساعات/وحدات السهر: <strong id="kpiTotOt">0</strong></span>
+        <span class="kpi-mini" style="background:#dcfce7;color:#065f46;border-color:#86efac;">إجمالي الصافي: <strong id="kpiNetMoney">0 ج.م</strong></span>
+      </div>
+    </section>
+
+    <!-- شريط الصيغة والخلية النشطة (Formula Bar) -->
+    <section class="formula-bar">
+      <div id="lblCellAddress" class="cell-address-box">B1</div>
+      <span class="fx-badge">fx</span>
+      <input type="text" id="inpFormulaBar" class="formula-input" placeholder="اكتب قيمة أو رمز يوم (ح، ن، س2، ح+ن، ح+س3) أو معادلة إكسيل مثل =SUM(A1:A5)" />
+      <span id="lblCellHint" class="cell-hint-label">اسم الموظف</span>
+    </section>
+
+    <!-- ترويسة تظهر فقط عند الطباعة الرسمية -->
+    <div class="print-only-header">
+      <div>
+        <strong id="printOrgTitle" style="font-size:15px;">الإدارة المالية</strong>
+        <div id="printSheetTitle" style="font-size:13px;margin-top:3px;">كشف الحضور والنبطشيات والسهر</div>
+      </div>
+      <div id="printDateLabel" style="font-size:12px;"></div>
+    </div>
+
+    <!-- شبكة خلايا الإكسيل الرئيسية -->
+    <div id="gridViewport" class="grid-viewport" tabindex="0">
+      <table id="excelTable" class="excel-table">
+        <thead id="excelThead"></thead>
+        <tbody id="excelTbody"></tbody>
+        <tfoot id="excelTfoot"></tfoot>
+      </table>
+
+      <!-- توقيعات تظهر عند الطباعة الرسمية -->
+      <div class="print-only-signatures">
+        <div>إعداد المختص<br/><br/>....................</div>
+        <div>المراجعة المالية<br/><br/>....................</div>
+        <div>يعتمد / المدير المسؤول<br/><br/>....................</div>
+      </div>
+    </div>
+
+    <!-- شريط أوراق العمل السفلي (Sheet Tabs) + شريط حالة الإكسيل -->
+    <footer class="bottom-bars">
+      <div class="sheet-tabs-bar">
+        <div id="sheetTabsList" class="tabs-list"></div>
+        <div class="add-sheet-btns">
+          <button type="button" id="btnAddUnifiedSheet" class="rb-btn primary-tint">+ ورقة حضور ونبطشيات وسهر</button>
+          <button type="button" id="btnAddFreeSheet" class="rb-btn">+ ورقة إكسيل حرة</button>
+        </div>
+      </div>
+
+      <div class="excel-statusbar">
+        <div id="statusModeText">جاهز — استخدم الأسهم، أو انقر مرتين للتحرير، أو اسحب مقبض الزاوية للتعبئة</div>
+        <div class="status-metrics">
+          <span id="statCount">العدد: 0</span>
+          <span id="statAvg">المتوسط: 0</span>
+          <span id="statSum">المجموع: 0</span>
+          <span id="lblDeviceBadge">الجهاز: --</span>
+        </div>
+      </div>
+    </footer>
+  </main>
+
+  <!-- ========================================================================
+       3. نافذة إعداد المزامنة السحابية عبر Google Sheets (متعددة الأجهزة)
+       ======================================================================== -->
+  <div id="cloudModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>☁️ ربط المزامنة السحابية بين الأجهزة (Google Sheets)</h3>
+        <button type="button" id="btnCloseCloudModal" class="modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>لمزامنة بيانات نفس المستخدم تلقائياً عند تسجيل الدخول من أي كمبيوتر أو موبايل، اربط جدول <strong>Google Sheet</strong> خاص بك مجاناً:</p>
+
+        <div class="form-group" style="margin-top:12px;">
+          <label for="inpGasUrl">رابط تطبيق الويب (Google Apps Script Web App URL)</label>
+          <input type="url" id="inpGasUrl" class="form-control ltr-input" placeholder="https://script.google.com/macros/s/.../exec" />
+        </div>
+
+        <div id="gasTestResult" class="auth-alert info hidden"></div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+          <button type="button" id="btnTestGas" class="rb-btn">🔌 اختبار الاتصال</button>
+          <button type="button" id="btnCopyQuickLink" class="rb-btn primary-tint">🔗 نسخ رابط الدخول السريع للأجهزة الأخرى</button>
+          <button type="button" id="btnCopyGasCode" class="rb-btn">📋 نسخ كود Google Apps Script الجاهز</button>
+        </div>
+
+        <div class="steps-guide">
+          <strong>خطوات الإعداد لأول مرة (دقيقتان فقط):</strong>
+          <ol>
+            <li>افتح جدول Google Sheet جديد عبر <code>sheets.new</code> ثم اختر من القائمة: <strong>Extensions (الإضافات) &rarr; Apps Script</strong>.</li>
+            <li>اضغط زر <strong>(📋 نسخ كود Google Apps Script الجاهز)</strong> أعلاه (أو انسخه من ملف <code>google-apps-script/Code.gs</code>) والصقه بالكامل ثم احفظ.</li>
+            <li>اضغط <strong>Deploy (نشر) &rarr; New deployment (نشر جديد)</strong> واختر النوع <strong>Web app</strong>.</li>
+            <li>اجعل <em>Execute as</em>: <strong>Me</strong>، واجعل <em>Who has access</em>: <strong>Anyone (أي شخص)</strong> ثم اضغط <strong>Deploy</strong>.</li>
+            <li>انسخ الرابط الناتج (ينتهي بـ <code>/exec</code>) والصقه في الحقل أعلاه ثم اضغط <strong>حفظ وتفعيل المزامنة</strong>.</li>
+          </ol>
+        </div>
+
+        <details>
+          <summary style="cursor:pointer;font-weight:700;color:#107c41;">عرض كود Google Apps Script المدمج</summary>
+          <pre id="gasScriptCodePreview" class="code-preview-box">const USERS_SHEET = "_AppUsers";
+const STORE_SHEET = "_AppStore";
+const CHUNK_SIZE = 42000;
+
+function doGet() {
+  return jsonResponse({ ok: true, service: "Financial Attendance & Shifts Cloud Sync" });
+}
+
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (_) { return jsonResponse({ ok: false, error: "الخادم مشغول حالياً" }); }
+  try {
+    const payload = JSON.parse((e &amp;&amp; e.postData &amp;&amp; e.postData.contents) || "{}");
+    const action = String(payload.action || "").trim();
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const usersSheet = ensureSheet(ss, USERS_SHEET, ["username", "displayName", "passwordHash", "token", "createdAt", "lastLoginAt"]);
+    const storeSheet = ensureSheet(ss, STORE_SHEET, ["username", "revision", "updatedAt", "updatedByDevice", "dataChunk1"]);
+    if (action === "ping") return jsonResponse({ ok: true, message: "تم الاتصال بقاعدة بيانات Google Sheets بنجاح" });
+    if (action === "register") return handleRegister(usersSheet, storeSheet, payload);
+    if (action === "login") return handleLogin(usersSheet, storeSheet, payload);
+    if (action === "poll") return handlePoll(usersSheet, storeSheet, payload);
+    if (action === "save") return handleSave(ss, usersSheet, storeSheet, payload);
+    return jsonResponse({ ok: false, error: "عملية غير معروفة" });
+  } catch (err) {
+    return jsonResponse({ ok: false, error: String(err.message || err) });
+  } finally {
+    try { lock.releaseLock(); } catch (_) {}
+  }
+}
+
+function ensureSheet(ss, name, headers) {
+  let sh = ss.getSheetByName(name);
+  if (!sh) { sh = ss.insertSheet(name); sh.appendRow(headers); }
+  return sh;
+}
+function normalizeUsername(u) { return String(u || "").trim().toLowerCase(); }
+function serverHash(u, h) {
+  const d = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, "FIN_SYS_V1::" + normalizeUsername(u) + "::" + h, Utilities.Charset.UTF_8);
+  return d.map(function(b){ const v = b &lt; 0 ? b + 256 : b; return ("0" + v.toString(16)).slice(-2); }).join("");
+}
+function generateToken(u) { return serverHash(u, new Date().getTime() + "::" + Math.random()); }
+function findRowByUsername(sh, u) {
+  const last = sh.getLastRow(); if (last &lt; 2) return -1;
+  const vals = sh.getRange(2, 1, last - 1, 1).getValues(); const t = normalizeUsername(u);
+  for (let i = 0; i &lt; vals.length; i++) if (normalizeUsername(vals[i][0]) === t) return i + 2;
+  return -1;
+}
+function readUserStore(sh, u) {
+  const r = findRowByUsername(sh, u); if (r === -1) return null;
+  const row = sh.getRange(r, 1, 1, Math.max(5, sh.getLastColumn())).getValues()[0];
+  const str = row.slice(4).filter(function(c){ return c !== "" &amp;&amp; c !== null; }).join("");
+  return { revision: Number(row[1] || 0), updatedAt: String(row[2] || ""), updatedByDevice: String(row[3] || ""), workbook: str ? JSON.parse(str) : null };
+}
+function writeUserStore(sh, u, rev, at, dev, wb) {
+  const s = JSON.stringify(wb || {}); const chunks = [];
+  for (let i = 0; i &lt; s.length; i += CHUNK_SIZE) chunks.push(s.slice(i, i + CHUNK_SIZE));
+  if (!chunks.length) chunks.push("{}");
+  const rowData = [normalizeUsername(u), rev, at, dev].concat(chunks);
+  const r = findRowByUsername(sh, u);
+  if (r === -1) sh.getRange(sh.getLastRow() + 1, 1, 1, rowData.length).setValues([rowData]);
+  else { sh.getRange(r, 1, 1, Math.max(rowData.length, sh.getLastColumn())).clearContent(); sh.getRange(r, 1, 1, rowData.length).setValues([rowData]); }
+}
+function handleRegister(uSh, sSh, p) {
+  const u = normalizeUsername(p.username);
+  if (u.length &lt; 3) return jsonResponse({ ok: false, error: "اسم المستخدم قصير" });
+  if (findRowByUsername(uSh, u) !== -1) return jsonResponse({ ok: false, error: "اسم المستخدم مسجل بالفعل" });
+  const now = new Date().toISOString(); const token = generateToken(u);
+  uSh.appendRow([u, p.displayName || u, serverHash(u, p.passwordHash), token, now, now]);
+  if (p.initialWorkbook) writeUserStore(sSh, u, 1, now, p.deviceId || "Web", p.initialWorkbook);
+  return jsonResponse({ ok: true, user: { username: u, displayName: p.displayName || u, token: token }, revision: 1, workbook: p.initialWorkbook || null });
+}
+function handleLogin(uSh, sSh, p) {
+  const u = normalizeUsername(p.username); const r = findRowByUsername(uSh, u);
+  if (r === -1) return jsonResponse({ ok: false, error: "اسم المستخدم غير موجود" });
+  const row = uSh.getRange(r, 1, 1, 6).getValues()[0];
+  if (String(row[2]) !== serverHash(u, p.passwordHash)) return jsonResponse({ ok: false, error: "كلمة المرور غير صحيحة" });
+  let token = String(row[3] || ""); if (!token) { token = generateToken(u); uSh.getRange(r, 4).setValue(token); }
+  uSh.getRange(r, 6).setValue(new Date().toISOString());
+  const st = readUserStore(sSh, u);
+  return jsonResponse({ ok: true, user: { username: u, displayName: String(row[1] || u), token: token }, revision: st ? st.revision : 0, updatedByDevice: st ? st.updatedByDevice : "", workbook: st ? st.workbook : null });
+}
+function verifyToken(uSh, u, t) { const r = findRowByUsername(uSh, u); return r !== -1 &amp;&amp; String(uSh.getRange(r, 4).getValue()) === String(t); }
+function handlePoll(uSh, sSh, p) {
+  const u = normalizeUsername(p.username);
+  if (!verifyToken(uSh, u, p.token)) return jsonResponse({ ok: false, error: "انتهت الجلسة" });
+  const st = readUserStore(sSh, u);
+  if (!st || st.revision &lt;= Number(p.clientRevision || 0)) return jsonResponse({ ok: true, hasUpdate: false, revision: st ? st.revision : 0 });
+  return jsonResponse({ ok: true, hasUpdate: true, revision: st.revision, updatedByDevice: st.updatedByDevice, workbook: st.workbook });
+}
+function handleSave(ss, uSh, sSh, p) {
+  const u = normalizeUsername(p.username);
+  if (!verifyToken(uSh, u, p.token)) return jsonResponse({ ok: false, error: "انتهت الجلسة" });
+  const st = readUserStore(sSh, u); const nextRev = (st ? st.revision : 0) + 1; const now = new Date().toISOString();
+  writeUserStore(sSh, u, nextRev, now, p.deviceId || "Web", p.workbook);
+  if (p.readableSummary &amp;&amp; p.readableSummary.rows &amp;&amp; p.readableSummary.rows.length) {
+    try {
+      let m = ss.getSheetByName(("ملخص_" + u).slice(0, 28)) || ss.insertSheet(("ملخص_" + u).slice(0, 28));
+      m.clearContents(); m.getRange(1, 1, p.readableSummary.rows.length, p.readableSummary.rows[0].length).setValues(p.readableSummary.rows);
+    } catch (_) {}
+  }
+  return jsonResponse({ ok: true, revision: nextRev, updatedAt: now });
+}
+function jsonResponse(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }</pre>
+        </details>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="btnSaveGas" class="btn-primary-auth" style="width:auto;padding:9px 22px;margin:0;">حفظ وتفعيل المزامنة</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       4. نافذة تعميم أسعار الحضور والنبطشيات والسهر وقواعد الحساب
+       ======================================================================== -->
+  <div id="ratesModal" class="modal-backdrop hidden">
+    <div class="modal-card" style="max-width:520px;">
+      <div class="modal-header">
+        <h3>💰 الفئات المالية وقواعد احتساب الورقة الموحدة</h3>
+        <button type="button" id="btnCloseRatesModal" class="modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="inpBatchRateAtt">فئة أجر يوم الحضور الافتراضية (ج.م)</label>
+          <input type="number" id="inpBatchRateAtt" class="form-control" step="0.5" />
+        </div>
+
+        <div class="form-group">
+          <label for="inpBatchRateShift">فئة النبطشية الواحدة (ج.م)</label>
+          <input type="number" id="inpBatchRateShift" class="form-control" step="0.5" />
+        </div>
+
+        <div class="form-group">
+          <label for="inpBatchRateOt">فئة ساعة / وحدة السهر (ج.م)</label>
+          <input type="number" id="inpBatchRateOt" class="form-control" step="0.5" />
+        </div>
+
+        <div class="form-group">
+          <label for="inpDefaultOtUnit">القيمة الرقمية عند كتابة رمز (س) بدون رقم بعده (مثلاً 1 ساعة أو 2 ساعة)</label>
+          <input type="number" id="inpDefaultOtUnit" class="form-control" step="0.5" value="1" />
+        </div>
+
+        <div class="form-group">
+          <label for="inpAbsPenalty">معامل جزاء يوم الغياب من أجر اليوم (0 = بدون خصم تلقائي، 1 = خصم يوم مقابل يوم غياب)</label>
+          <input type="number" id="inpAbsPenalty" class="form-control" step="0.5" value="0" />
+        </div>
+
+        <div class="form-group" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="chkApplyRatesAll" checked />
+            <span>تطبيق الأسعار أعلاه على جميع صفوف الموظفين في هذه الورقة</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="chkShiftCountsAtt" />
+            <span>احتساب رمز النبطشية المنفرد <code>ن</code> كيوم حضور أيضاً تلقائياً</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="chkMissionCountsAtt" checked />
+            <span>احتساب رمز المأمورية <code>م</code> ضمن أيام الحضور</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="btnApplyRatesSettings" class="btn-primary-auth" style="width:auto;padding:9px 22px;margin:0;">تطبيق وحفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- حاوية الإشعارات السريعة -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- ملفات JavaScript النقية (تعمل مباشرة محلياً وعبر الويب بدون أي مكتبات خارجية معقدة) -->
+  <script src="js/config.js"></script>
+  <script src="js/spreadsheet.js"></script>
+  <script src="js/sync.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
