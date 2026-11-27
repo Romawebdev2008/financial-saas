@@ -11,6 +11,7 @@
 
   const STORAGE_KEYS = {
     SCRIPT_URL: "fin_sys_gas_url_v1",
+    LAST_DEFAULT_URL: "fin_sys_default_gas_url_v1",
     SESSION: "fin_sys_session_v1",
     LOCAL_USERS: "fin_sys_local_users_v1",
     DEVICE_ID: "fin_sys_device_id_v1",
@@ -83,23 +84,49 @@
     return id;
   }
 
+  function getDefaultScriptUrl() {
+    const def = (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_SCRIPT_URL) || "";
+    return String(def).trim();
+  }
+
+  function hasFixedDefaultUrl() {
+    return Boolean(getDefaultScriptUrl());
+  }
+
+  // إذا تم تثبيت أو تحديث الرابط الافتراضي في config.js، يتم تفعيله تلقائياً حتى على الأجهزة السابقة
+  function syncDefaultUrlFromConfig() {
+    const def = getDefaultScriptUrl();
+    if (!def) return;
+    const prevDef = localStorage.getItem(STORAGE_KEYS.LAST_DEFAULT_URL) || "";
+    if (prevDef !== def) {
+      localStorage.setItem(STORAGE_KEYS.LAST_DEFAULT_URL, def);
+      localStorage.removeItem(STORAGE_KEYS.SCRIPT_URL);
+    }
+  }
+
   // فحص ما إذا كان الرابط يحتوي على باراميتر ?api=... لربط الأجهزة الجديدة تلقائياً بضغطة واحدة
   function checkUrlForCloudApi() {
     try {
       const params = new URLSearchParams(window.location.search);
       const apiParam = params.get("api");
       if (apiParam && /^https:\/\/script\.google\.com\/macros\/s\//i.test(apiParam.trim())) {
-        localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, apiParam.trim());
+        const cleanApi = apiParam.trim();
+        if (cleanApi !== getDefaultScriptUrl()) {
+          localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, cleanApi);
+        }
       }
     } catch (_) {}
   }
 
+  syncDefaultUrlFromConfig();
   checkUrlForCloudApi();
 
   const state = {
     session: null,       // { username, displayName, token, passwordHash }
     revision: 0,
     dirty: false,
+    saveSeq: 0,
+    queuedSave: null,
     isSaving: false,
     isPolling: false,
     pollTimer: null,
@@ -111,17 +138,27 @@
   function getScriptUrl() {
     const saved = localStorage.getItem(STORAGE_KEYS.SCRIPT_URL);
     if (saved && saved.trim()) return saved.trim();
-    const def = (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_SCRIPT_URL) || "";
-    return def.trim();
+    return getDefaultScriptUrl();
   }
 
   function setScriptUrl(url) {
     const clean = String(url || "").trim();
-    if (clean) {
+    const def = getDefaultScriptUrl();
+    if (clean && clean !== def) {
       localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, clean);
     } else {
       localStorage.removeItem(STORAGE_KEYS.SCRIPT_URL);
     }
+  }
+
+  function resetToDefaultScriptUrl() {
+    localStorage.removeItem(STORAGE_KEYS.SCRIPT_URL);
+    return getDefaultScriptUrl();
+  }
+
+  function hasCustomUrlOverride() {
+    const saved = localStorage.getItem(STORAGE_KEYS.SCRIPT_URL);
+    return Boolean(saved && saved.trim() && saved.trim() !== getDefaultScriptUrl());
   }
 
   function hasCloudConfigured() {
@@ -281,7 +318,7 @@
     // تسجيل الدخول في الوضع المحلي
     const localUsers = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOCAL_USERS) || "{}");
     const u = localUsers[username];
-    if (!u) throw new Error("الحساب غير موجود محلياً. أنشئ حساباً جديداً أو اربط رابط Google Sheets أولاً إذا كان حسابك سحابياً.");
+    if (!u) throw new Error("الحساب غير موجود محلياً. أنشئ حساباً جديداً للدخول أولاً.");
     if (u.passwordHash !== passwordHash) throw new Error("كلمة المرور غير صحيحة.");
 
     const mirror = loadLocalMirror(username);
@@ -394,6 +431,7 @@
   function scheduleSave(workbook, activeSheet) {
     if (!state.session) return;
     state.dirty = true;
+    state.saveSeq += 1;
     saveLocalMirror(state.session.username, workbook, state.revision, true);
 
     if (!hasCloudConfigured()) {
@@ -428,8 +466,12 @@
       return;
     }
 
-    if (state.isSaving) return;
+    if (state.isSaving) {
+      state.queuedSave = { workbook: workbook, activeSheet: activeSheet };
+      return;
+    }
     state.isSaving = true;
+    const seqAtStart = state.saveSeq;
     emitStatus("syncing", "جاري الرفع إلى Google Sheets...");
 
     try {
@@ -445,14 +487,21 @@
       if (!res.ok) throw new Error(res.error || "تعذر الحفظ السحابي");
 
       state.revision = Number(res.revision || (state.revision + 1));
-      state.dirty = false;
-      saveLocalMirror(state.session.username, workbook, state.revision, false);
-      emitStatus("synced", "تمت المزامنة سحابياً ✓");
+      if (state.saveSeq === seqAtStart && !state.queuedSave) {
+        state.dirty = false;
+        saveLocalMirror(state.session.username, workbook, state.revision, false);
+        emitStatus("synced", "تمت المزامنة سحابياً ✓");
+      }
     } catch (err) {
       emitStatus("error", "حُفظ محلياً - بانتظار الشبكة للمزامنة");
       throw err;
     } finally {
       state.isSaving = false;
+      if (state.queuedSave) {
+        const next = state.queuedSave;
+        state.queuedSave = null;
+        pushWorkbookNow(next.workbook, next.activeSheet).catch(function () {});
+      }
     }
   }
 
@@ -479,6 +528,11 @@
       });
       if (!res.ok) {
         emitStatus("error", res.error || "تعذر التحقق من التحديثات");
+        return false;
+      }
+
+      // في حال قام المستخدم بالنقر أو التعديل أثناء انتظار رد الفحص السحابي، لا نكتب فوق تعديله المحلي
+      if (state.dirty || state.isSaving) {
         return false;
       }
 
@@ -568,6 +622,10 @@
 
   window.SyncManager = {
     getScriptUrl: getScriptUrl,
+    getDefaultScriptUrl: getDefaultScriptUrl,
+    hasFixedDefaultUrl: hasFixedDefaultUrl,
+    hasCustomUrlOverride: hasCustomUrlOverride,
+    resetToDefaultScriptUrl: resetToDefaultScriptUrl,
     setScriptUrl: setScriptUrl,
     hasCloudConfigured: hasCloudConfigured,
     getDeviceId: getOrCreateDeviceId,
