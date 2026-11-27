@@ -11,6 +11,7 @@
 
   const STORAGE_KEYS = {
     SCRIPT_URL: "fin_sys_gas_url_v1",
+    LAST_DEFAULT_URL: "fin_sys_default_gas_url_v1",
     SESSION: "fin_sys_session_v1",
     LOCAL_USERS: "fin_sys_local_users_v1",
     DEVICE_ID: "fin_sys_device_id_v1",
@@ -83,17 +84,41 @@
     return id;
   }
 
+  function getDefaultScriptUrl() {
+    const def = (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_SCRIPT_URL) || "";
+    return String(def).trim();
+  }
+
+  function hasFixedDefaultUrl() {
+    return Boolean(getDefaultScriptUrl());
+  }
+
+  // إذا تم تثبيت أو تحديث الرابط الافتراضي في config.js، يتم تفعيله تلقائياً حتى على الأجهزة السابقة
+  function syncDefaultUrlFromConfig() {
+    const def = getDefaultScriptUrl();
+    if (!def) return;
+    const prevDef = localStorage.getItem(STORAGE_KEYS.LAST_DEFAULT_URL) || "";
+    if (prevDef !== def) {
+      localStorage.setItem(STORAGE_KEYS.LAST_DEFAULT_URL, def);
+      localStorage.removeItem(STORAGE_KEYS.SCRIPT_URL);
+    }
+  }
+
   // فحص ما إذا كان الرابط يحتوي على باراميتر ?api=... لربط الأجهزة الجديدة تلقائياً بضغطة واحدة
   function checkUrlForCloudApi() {
     try {
       const params = new URLSearchParams(window.location.search);
       const apiParam = params.get("api");
       if (apiParam && /^https:\/\/script\.google\.com\/macros\/s\//i.test(apiParam.trim())) {
-        localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, apiParam.trim());
+        const cleanApi = apiParam.trim();
+        if (cleanApi !== getDefaultScriptUrl()) {
+          localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, cleanApi);
+        }
       }
     } catch (_) {}
   }
 
+  syncDefaultUrlFromConfig();
   checkUrlForCloudApi();
 
   const state = {
@@ -111,17 +136,27 @@
   function getScriptUrl() {
     const saved = localStorage.getItem(STORAGE_KEYS.SCRIPT_URL);
     if (saved && saved.trim()) return saved.trim();
-    const def = (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_SCRIPT_URL) || "";
-    return def.trim();
+    return getDefaultScriptUrl();
   }
 
   function setScriptUrl(url) {
     const clean = String(url || "").trim();
-    if (clean) {
+    const def = getDefaultScriptUrl();
+    if (clean && clean !== def) {
       localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, clean);
     } else {
       localStorage.removeItem(STORAGE_KEYS.SCRIPT_URL);
     }
+  }
+
+  function resetToDefaultScriptUrl() {
+    localStorage.removeItem(STORAGE_KEYS.SCRIPT_URL);
+    return getDefaultScriptUrl();
+  }
+
+  function hasCustomUrlOverride() {
+    const saved = localStorage.getItem(STORAGE_KEYS.SCRIPT_URL);
+    return Boolean(saved && saved.trim() && saved.trim() !== getDefaultScriptUrl());
   }
 
   function hasCloudConfigured() {
@@ -281,7 +316,7 @@
     // تسجيل الدخول في الوضع المحلي
     const localUsers = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOCAL_USERS) || "{}");
     const u = localUsers[username];
-    if (!u) throw new Error("الحساب غير موجود محلياً. أنشئ حساباً جديداً أو اربط رابط Google Sheets أولاً إذا كان حسابك سحابياً.");
+    if (!u) throw new Error("الحساب غير موجود محلياً. أنشئ حساباً جديداً للدخول أولاً.");
     if (u.passwordHash !== passwordHash) throw new Error("كلمة المرور غير صحيحة.");
 
     const mirror = loadLocalMirror(username);
@@ -568,6 +603,10 @@
 
   window.SyncManager = {
     getScriptUrl: getScriptUrl,
+    getDefaultScriptUrl: getDefaultScriptUrl,
+    hasFixedDefaultUrl: hasFixedDefaultUrl,
+    hasCustomUrlOverride: hasCustomUrlOverride,
+    resetToDefaultScriptUrl: resetToDefaultScriptUrl,
     setScriptUrl: setScriptUrl,
     hasCloudConfigured: hasCloudConfigured,
     getDeviceId: getOrCreateDeviceId,

@@ -104,8 +104,8 @@
     const txt = $("authCloudStatusText");
     if (txt) {
       txt.textContent = hasCloud
-        ? "☁️ متصل بـ Google Sheets: تسجيل الدخول يزامن بياناتك تلقائياً على أي جهاز"
-        : "💻 وضع محلي سريع: اضغط (إعداد السحابة) لربط Google Sheets للمزامنة بين الأجهزة";
+        ? "☁️ متصل بقاعدة البيانات السحابية تلقائياً — سجل دخولك مباشرة من أي جهاز"
+        : "💻 سجل دخولك للوصول إلى مساحة العمل وإعدادات قاعدة البيانات من الداخل";
     }
   }
 
@@ -802,8 +802,17 @@
   // 5. نوافذ الإعدادات (Google Sheets Cloud Modal & Batch Rates Modal)
   // ==========================================================================
   function openCloudModal() {
+    if (!Sync.getSession()) return;
     $("inpGasUrl").value = Sync.getScriptUrl();
     $("gasTestResult").classList.add("hidden");
+    const fixedNotice = $("fixedUrlNotice");
+    if (fixedNotice) {
+      fixedNotice.classList.toggle("hidden", !Sync.hasFixedDefaultUrl());
+    }
+    const resetBtn = $("btnResetDefaultGas");
+    if (resetBtn) {
+      resetBtn.classList.toggle("hidden", !(Sync.hasFixedDefaultUrl() && Sync.hasCustomUrlOverride()));
+    }
     $("cloudModal").classList.remove("hidden");
   }
 
@@ -875,7 +884,6 @@
     $("tabLogin").addEventListener("click", function () { setAuthMode("login"); });
     $("tabRegister").addEventListener("click", function () { setAuthMode("register"); });
     $("authForm").addEventListener("submit", handleAuthSubmit);
-    $("btnOpenCloudFromAuth").addEventListener("click", openCloudModal);
 
     // أحداث الشريط العلوي
     $("inpWorkbookTitle").addEventListener("change", function () {
@@ -1355,19 +1363,33 @@
       }
     });
 
+    if ($("btnResetDefaultGas")) {
+      $("btnResetDefaultGas").addEventListener("click", function () {
+        const def = Sync.resetToDefaultScriptUrl();
+        $("inpGasUrl").value = def;
+        $("btnResetDefaultGas").classList.add("hidden");
+        showToast("تمت استعادة رابط الداتا بيز الثابت المدمج في الكود");
+      });
+    }
+
     $("btnSaveGas").addEventListener("click", async function () {
       const url = $("inpGasUrl").value.trim();
       Sync.setScriptUrl(url);
+      const effectiveUrl = Sync.getScriptUrl();
       closeCloudModal();
-      if (url && Sync.getSession()) {
+      if (effectiveUrl && Sync.getSession()) {
         try {
-          await Sync.bridgeLocalAccountToCloud(ui.workbook);
-          showToast("تم ربط الحساب ومزامنة البيانات مع Google Sheets بنجاح!");
+          if (Sync.getSession().mode === "local") {
+            await Sync.bridgeLocalAccountToCloud(ui.workbook);
+          } else {
+            await Sync.pushWorkbookNow(ui.workbook, getActiveSheet());
+          }
+          showToast("تم تفعيل رابط قاعدة البيانات والمزامنة بنجاح!");
         } catch (err) {
           showToast(err.message || "تم حفظ الرابط", "info");
         }
       } else {
-        showToast(url ? "تم حفظ رابط السحابة بنجاح" : "تم التحويل للوضع المحلي");
+        showToast(effectiveUrl ? "تم حفظ رابط السحابة بنجاح" : "تم التحويل للوضع المحلي");
       }
     });
 

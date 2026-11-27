@@ -4,8 +4,8 @@
  * على جميع الأجهزة بمجرد فتح الموقع دون الحاجة لإدخاله يدوياً على كل جهاز.
  */
 window.APP_CONFIG = {
-  // ضع رابط النشر (Web App URL) الخاص بـ Google Apps Script هنا إن رغبت بتثبيته لكل الأجهزة:
-  DEFAULT_SCRIPT_URL: "",
+  // رابط النشر الثابت (Web App URL) الخاص بـ Google Apps Script ليعمل تلقائياً على كل الأجهزة:
+  DEFAULT_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbz4QIUw9-CxQ5F3Az6vWgdkhHv3BTOBsJJdsWZiQoEa2TP72DSBKpr0UTvxg8AcQ88Arw/exec",
 
   // الفاصل الزمني للمزامنة التلقائية في الخلفية (بالمللي ثانية) - 12 ثانية
   AUTO_POLL_INTERVAL_MS: 12000,
