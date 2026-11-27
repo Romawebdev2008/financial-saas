@@ -24,7 +24,8 @@ window.APP_CONFIG = {
     "غ": { label: "غياب", short: "غ", badgeClass: "code-absent", color: "#dc2626", bg: "#fef2f2" },
     "إ": { label: "إجازة", short: "إ", badgeClass: "code-leave", color: "#7c3aed", bg: "#f5f3ff" },
     "م": { label: "مأمورية", short: "م", badgeClass: "code-mission", color: "#0284c7", bg: "#f0f9ff" },
-    "ع": { label: "عطلة / راحة", short: "ع", badgeClass: "code-off", color: "#64748b", bg: "#f1f5f9" }
+    "ر": { label: "راحة", short: "ر", badgeClass: "code-rest", color: "#0e7490", bg: "#ecfeff" },
+    "ع": { label: "عطلة", short: "ع", badgeClass: "code-off", color: "#64748b", bg: "#f1f5f9" }
   },
 
   ARABIC_MONTHS: [

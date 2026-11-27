@@ -245,7 +245,8 @@
       { code: "غ", title: "غياب (غ)", bg: "#fef2f2", color: "#dc2626" },
       { code: "إ", title: "إجازة (إ)", bg: "#f5f3ff", color: "#6d28d9" },
       { code: "م", title: "مأمورية (م)", bg: "#f0f9ff", color: "#0369a1" },
-      { code: "ع", title: "عطلة/راحة (ع)", bg: "#f1f5f9", color: "#475569" },
+      { code: "ر", title: "راحة (ر)", bg: "#ecfeff", color: "#0e7490" },
+      { code: "ع", title: "عطلة (ع)", bg: "#f1f5f9", color: "#475569" },
       { code: "", title: "مسح الخلية ⌫", bg: "#ffffff", color: "#334155" }
     ];
 
@@ -621,7 +622,7 @@
       fInput.value = String(raw);
       fInput.readOnly = false;
       if (col.kind === "day") {
-        hint.textContent = "رموز اليوم: ح | ن | س | س3 | ح+ن | ح+س2 | غ | إ | م | ع";
+        hint.textContent = "رموز اليوم: ح | ن | س | س3 | ح+ن | ح+س2 | غ | إ | م | ر | ع";
       } else {
         hint.textContent = col.title + " (يدعم القيم والمعادلات مثل =SUM أو =150*2)";
       }
@@ -1274,7 +1275,7 @@
     const DAY_CODE_CLASSES = [
       "code-att", "code-shift", "code-overtime", "code-att-shift",
       "code-att-ot", "code-triple", "code-absent", "code-leave",
-      "code-mission", "code-off"
+      "code-mission", "code-rest", "code-off"
     ];
 
     function getTargetElement(ev) {
