@@ -19,6 +19,10 @@
     selection: { r1: 0, c1: 1, r2: 0, c2: 1 },
     isMouseSelecting: false,
     isFillDragging: false,
+    isBrushPainting: false,
+    brushDragValue: "",
+    lastBrushStampAt: 0,
+    lastBrushHintAt: 0,
     fillSourceVal: "",
     inlineEditing: null, // { r, c, inputEl }
     brushStamp: null,    // عند تفعيل وضع الختم المباشر بالنقرة
@@ -175,7 +179,9 @@
     ui.undoStack = [];
     ui.redoStack = [];
 
+    syncBrushModeUI();
     renderStampButtons();
+    updateStatusModeLabel();
     populateMonthYearSelectors();
     renderAll(false);
   }
@@ -194,9 +200,39 @@
     });
   }
 
+  function syncBrushModeUI() {
+    const btn = $("btnToggleBrushMode");
+    const vp = $("gridViewport");
+    const isActive = ui.brushStamp !== null;
+    if (btn) {
+      btn.classList.toggle("active", isActive);
+      btn.textContent = isActive
+        ? "🖌 ختم بالنقر: مفعل (" + (ui.brushStamp || "مسح") + ") ✓"
+        : "🖌 ختم بالنقر";
+    }
+    if (vp) {
+      vp.classList.toggle("brush-mode-active", isActive);
+    }
+  }
+
+  function hasDayInCurrentSelection() {
+    const sheet = getActiveSheet();
+    if (!sheet || !ui.calcCache) return false;
+    if (sheet.type === "free") return true;
+    const norm = getNormalizedSelection();
+    for (let c = norm.minC; c <= norm.maxC; c++) {
+      const col = ui.calcCache.cols[c];
+      if (col && !col.hidden && col.editable && col.kind === "day") {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function renderStampButtons() {
     const container = $("stampButtonsContainer");
     container.innerHTML = "";
+    syncBrushModeUI();
     const stamps = [
       { code: "ح", title: "حضور (ح)", bg: "#ecfdf5", color: "#047857" },
       { code: "ن", title: "نبطشية (ن)", bg: "#eff6ff", color: "#1d4ed8" },
@@ -226,8 +262,13 @@
           ui.brushStamp = st.code;
           renderStampButtons();
           updateStatusModeLabel();
-        } else {
+        } else if (hasDayInCurrentSelection()) {
           applyValueToSelection(st.code, true);
+        } else {
+          ui.brushStamp = st.code;
+          renderStampButtons();
+          updateStatusModeLabel();
+          showToast("🖌 تم تفعيل الختم بالنقر (" + (st.code || "مسح") + ") — انقر الآن على خلايا الأيام لتسجيله", "info");
         }
         $("gridViewport").focus({ preventScroll: true });
       });
@@ -343,6 +384,10 @@
   }
 
   function renderGrid(sheet, calc) {
+    const vp = $("gridViewport");
+    const savedScrollTop = vp ? vp.scrollTop : 0;
+    const savedScrollLeft = vp ? vp.scrollLeft : 0;
+
     const thead = $("excelThead");
     const tbody = $("excelTbody");
     const tfoot = $("excelTfoot");
@@ -471,6 +516,11 @@
 
       tfoot.appendChild(footTr);
     }
+
+    if (vp) {
+      vp.scrollTop = savedScrollTop;
+      vp.scrollLeft = savedScrollLeft;
+    }
   }
 
   // ==========================================================================
@@ -527,9 +577,9 @@
     const activeTd = tbody.querySelector('td[data-r="' + ui.activeCell.r + '"][data-c="' + ui.activeCell.c + '"]');
     if (activeTd) {
       activeTd.classList.add("cell-active");
-      // إضافة مقبض التعبئة السريعة في زاوية التحديد السفلى اليسرى
+      // إضافة مقبض التعبئة السريعة في زاوية التحديد السفلى اليسرى (عند عدم تفعيل وضع الختم بالنقر)
       const cornerTd = tbody.querySelector('td[data-r="' + norm.maxR + '"][data-c="' + norm.maxC + '"]') || activeTd;
-      if (!ui.inlineEditing) {
+      if (!ui.inlineEditing && ui.brushStamp === null) {
         cornerTd.style.position = cornerTd.classList.contains("sticky-col-1") || cornerTd.classList.contains("sticky-col-2") ? "sticky" : "relative";
         const handle = document.createElement("div");
         handle.className = "fill-handle";
@@ -1134,14 +1184,18 @@
     // وضع الفرشاة / الختم المباشر
     $("btnToggleBrushMode").addEventListener("click", function () {
       if (ui.brushStamp === null) {
-        ui.brushStamp = ui.lastStampCode || "ح";
-        $("btnToggleBrushMode").classList.add("active");
+        ui.brushStamp = (ui.lastStampCode !== null && ui.lastStampCode !== undefined)
+          ? ui.lastStampCode
+          : "ح";
+        showToast("🖌 وضع الختم بالنقر مفعل (" + (ui.brushStamp || "مسح") + ") — انقر أو اسحب على خلايا الأيام", "info");
       } else {
         ui.brushStamp = null;
-        $("btnToggleBrushMode").classList.remove("active");
+        showToast("تم إيقاف وضع الختم بالنقر", "info");
       }
       renderStampButtons();
       updateStatusModeLabel();
+      updateSelectionHighlights();
+      $("gridViewport").focus({ preventScroll: true });
     });
 
     // شريط الصيغة (fx)
@@ -1181,14 +1235,54 @@
       renderAll(true);
     });
 
-    // أحداث الماوس على شبكة الخلايا (تحديد، سحب النطاق، مقبض التعبئة، نقر مزدوج)
+    // أحداث الماوس واللمس على شبكة الخلايا (تحديد، ختم بالنقر والسحب، مقبض التعبئة، نقر مزدوج)
     const tbody = $("excelTbody");
+    const DAY_CODE_CLASSES = [
+      "code-att", "code-shift", "code-overtime", "code-att-shift",
+      "code-att-ot", "code-triple", "code-absent", "code-leave",
+      "code-mission", "code-off"
+    ];
+
+    function getTargetElement(ev) {
+      const t = ev && ev.target;
+      if (!t) return null;
+      return t.nodeType === 1 ? t : t.parentElement;
+    }
+
+    function paintBrushCellInPlace(sheet, col, r, c, valToApply, td) {
+      sheet.rows[r][col.key] = valToApply;
+      const cellEl = td || tbody.querySelector('td[data-r="' + r + '"][data-c="' + c + '"]');
+      if (cellEl) {
+        cellEl.textContent = valToApply === undefined || valToApply === null ? "" : String(valToApply);
+        if (col.kind === "day") {
+          DAY_CODE_CLASSES.forEach(function (cls) { cellEl.classList.remove(cls); });
+          const parsed = Engine.parseDayCell(valToApply, sheet.settings);
+          if (parsed && parsed.cssClass) {
+            cellEl.classList.add(parsed.cssClass);
+          }
+        }
+      }
+    }
+
+    function notifyNonDayBrushClick(sheet) {
+      const now = Date.now();
+      if (now - ui.lastBrushHintAt < 2000) return;
+      ui.lastBrushHintAt = now;
+      if (sheet && sheet.hideDays) {
+        showToast("أعمدة الأيام مطوية حالياً — اضغط (📅 إظهار أيام الشهر) أولاً للختم بالنقر", "info");
+      } else {
+        showToast("انقر على خلايا أيام الشهر (1 - 31) لتطبيق الختم (" + (ui.brushStamp || "مسح") + ")", "info");
+      }
+    }
 
     tbody.addEventListener("mousedown", function (ev) {
-      if (ev.target.classList.contains("inline-cell-editor")) return;
+      if (ev.button !== undefined && ev.button !== 0) return;
+      const targetEl = getTargetElement(ev);
+      if (!targetEl) return;
+      if (targetEl.classList.contains("inline-cell-editor")) return;
 
       // فحص مقبض التعبئة السريعة (Fill Handle)
-      if (ev.target.classList.contains("fill-handle")) {
+      if (targetEl.classList.contains("fill-handle")) {
         ev.preventDefault();
         const sheet = getActiveSheet();
         const col = ui.calcCache.cols[ui.activeCell.c];
@@ -1199,7 +1293,7 @@
         return;
       }
 
-      const td = ev.target.closest("td[data-r][data-c]");
+      const td = targetEl.closest("td[data-r][data-c]");
       if (!td) return;
 
       $("gridViewport").focus({ preventScroll: true });
@@ -1211,7 +1305,7 @@
         commitInlineEditIfAny(true);
       }
 
-      if (ev.shiftKey) {
+      if (ev.shiftKey && ui.brushStamp === null) {
         ui.selection.r2 = r;
         ui.selection.c2 = c;
       } else {
@@ -1220,15 +1314,25 @@
         ui.isMouseSelecting = true;
       }
 
-      // إذا كان وضع فرشاة الختم السريع مفعلاً، نطبق الرمز بمجرد النقر على خلية يوم!
+      // إذا كان وضع فرشاة الختم السريع مفعلاً، نطبق الرمز فوراً بدون هدم الجدول أثناء الضغط!
       if (ui.brushStamp !== null) {
         const sheet = getActiveSheet();
         const col = ui.calcCache && ui.calcCache.cols[c];
         if (sheet && col && col.editable && (sheet.type === "free" || col.kind === "day")) {
+          ev.preventDefault();
+          const currentVal = String(sheet.rows[r][col.key] !== undefined ? sheet.rows[r][col.key] : "").trim();
+          const nextVal = (ui.brushStamp !== "" && currentVal === ui.brushStamp) ? "" : ui.brushStamp;
           pushUndoSnapshot();
-          sheet.rows[r][col.key] = ui.brushStamp;
-          renderAll(true);
+          ui.isBrushPainting = true;
+          ui.brushDragValue = nextVal;
+          ui.lastBrushStampAt = Date.now();
+          paintBrushCellInPlace(sheet, col, r, c, nextVal, null);
+          updateSelectionHighlights();
+          updateFormulaBar();
           return;
+        }
+        if (sheet && sheet.type === "unified") {
+          notifyNonDayBrushClick(sheet);
         }
       }
 
@@ -1238,19 +1342,22 @@
     });
 
     tbody.addEventListener("mouseover", function (ev) {
-      if (!ui.isMouseSelecting && !ui.isFillDragging) return;
-      const td = ev.target.closest("td[data-r][data-c]");
+      if (!ui.isMouseSelecting && !ui.isFillDragging && !ui.isBrushPainting) return;
+      const targetEl = getTargetElement(ev);
+      if (!targetEl) return;
+      const td = targetEl.closest("td[data-r][data-c]");
       if (!td) return;
       const r = parseInt(td.dataset.r, 10);
       const c = parseInt(td.dataset.c, 10);
       ui.selection.r2 = r;
       ui.selection.c2 = c;
 
-      if (ui.brushStamp !== null && ui.isMouseSelecting) {
+      if (ui.isBrushPainting && ui.brushStamp !== null) {
         const sheet = getActiveSheet();
         const col = ui.calcCache && ui.calcCache.cols[c];
-        if (sheet && col && col.editable && col.kind === "day") {
-          sheet.rows[r][col.key] = ui.brushStamp;
+        if (sheet && col && col.editable && (sheet.type === "free" || col.kind === "day")) {
+          paintBrushCellInPlace(sheet, col, r, c, ui.brushDragValue, td);
+          ui.lastBrushStampAt = Date.now();
         }
       }
 
@@ -1263,16 +1370,49 @@
         ui.isFillDragging = false;
         applyValueToSelection(ui.fillSourceVal, false);
       }
+      if (ui.isBrushPainting) {
+        ui.isBrushPainting = false;
+        ui.isMouseSelecting = false;
+        ui.lastBrushStampAt = Date.now();
+        renderAll(true);
+        return;
+      }
       if (ui.isMouseSelecting) {
         ui.isMouseSelecting = false;
-        if (ui.brushStamp !== null) {
-          renderAll(true);
-        }
+      }
+    });
+
+    // دعم احتياطي للنقر على شاشات اللمس والموبايل في حال تم تجاوز mousedown داخل الحاوية القابلة للتمرير
+    tbody.addEventListener("click", function (ev) {
+      if (ui.brushStamp === null) return;
+      if (Date.now() - ui.lastBrushStampAt < 350) return;
+      const targetEl = getTargetElement(ev);
+      if (!targetEl || targetEl.classList.contains("inline-cell-editor")) return;
+      const td = targetEl.closest("td[data-r][data-c]");
+      if (!td) return;
+      const r = parseInt(td.dataset.r, 10);
+      const c = parseInt(td.dataset.c, 10);
+      const sheet = getActiveSheet();
+      const col = ui.calcCache && ui.calcCache.cols[c];
+      if (sheet && col && col.editable && (sheet.type === "free" || col.kind === "day")) {
+        const currentVal = String(sheet.rows[r][col.key] !== undefined ? sheet.rows[r][col.key] : "").trim();
+        const nextVal = (ui.brushStamp !== "" && currentVal === ui.brushStamp) ? "" : ui.brushStamp;
+        pushUndoSnapshot();
+        ui.activeCell = { r: r, c: c };
+        ui.selection = { r1: r, c1: c, r2: r, c2: c };
+        sheet.rows[r][col.key] = nextVal;
+        ui.lastBrushStampAt = Date.now();
+        renderAll(true);
+      } else if (sheet && sheet.type === "unified") {
+        notifyNonDayBrushClick(sheet);
       }
     });
 
     tbody.addEventListener("dblclick", function (ev) {
-      const td = ev.target.closest("td[data-r][data-c]");
+      if (ui.brushStamp !== null) return;
+      const targetEl = getTargetElement(ev);
+      if (!targetEl) return;
+      const td = targetEl.closest("td[data-r][data-c]");
       if (!td) return;
       startInlineEdit(parseInt(td.dataset.r, 10), parseInt(td.dataset.c, 10));
     });
@@ -1284,6 +1424,16 @@
 
       const activeTag = document.activeElement ? document.activeElement.tagName : "";
       if (activeTag === "INPUT" || activeTag === "TEXTAREA" || activeTag === "SELECT") {
+        return;
+      }
+
+      if (ev.key === "Escape" && ui.brushStamp !== null) {
+        ev.preventDefault();
+        ui.brushStamp = null;
+        renderStampButtons();
+        updateStatusModeLabel();
+        updateSelectionHighlights();
+        showToast("تم إيقاف وضع الختم بالنقر", "info");
         return;
       }
 

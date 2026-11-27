@@ -125,6 +125,8 @@
     session: null,       // { username, displayName, token, passwordHash }
     revision: 0,
     dirty: false,
+    saveSeq: 0,
+    queuedSave: null,
     isSaving: false,
     isPolling: false,
     pollTimer: null,
@@ -429,6 +431,7 @@
   function scheduleSave(workbook, activeSheet) {
     if (!state.session) return;
     state.dirty = true;
+    state.saveSeq += 1;
     saveLocalMirror(state.session.username, workbook, state.revision, true);
 
     if (!hasCloudConfigured()) {
@@ -463,8 +466,12 @@
       return;
     }
 
-    if (state.isSaving) return;
+    if (state.isSaving) {
+      state.queuedSave = { workbook: workbook, activeSheet: activeSheet };
+      return;
+    }
     state.isSaving = true;
+    const seqAtStart = state.saveSeq;
     emitStatus("syncing", "جاري الرفع إلى Google Sheets...");
 
     try {
@@ -480,14 +487,21 @@
       if (!res.ok) throw new Error(res.error || "تعذر الحفظ السحابي");
 
       state.revision = Number(res.revision || (state.revision + 1));
-      state.dirty = false;
-      saveLocalMirror(state.session.username, workbook, state.revision, false);
-      emitStatus("synced", "تمت المزامنة سحابياً ✓");
+      if (state.saveSeq === seqAtStart && !state.queuedSave) {
+        state.dirty = false;
+        saveLocalMirror(state.session.username, workbook, state.revision, false);
+        emitStatus("synced", "تمت المزامنة سحابياً ✓");
+      }
     } catch (err) {
       emitStatus("error", "حُفظ محلياً - بانتظار الشبكة للمزامنة");
       throw err;
     } finally {
       state.isSaving = false;
+      if (state.queuedSave) {
+        const next = state.queuedSave;
+        state.queuedSave = null;
+        pushWorkbookNow(next.workbook, next.activeSheet).catch(function () {});
+      }
     }
   }
 
@@ -514,6 +528,11 @@
       });
       if (!res.ok) {
         emitStatus("error", res.error || "تعذر التحقق من التحديثات");
+        return false;
+      }
+
+      // في حال قام المستخدم بالنقر أو التعديل أثناء انتظار رد الفحص السحابي، لا نكتب فوق تعديله المحلي
+      if (state.dirty || state.isSaving) {
         return false;
       }
 

@@ -484,6 +484,14 @@ button, input, select, textarea {
   font-weight: 700;
 }
 
+#btnToggleBrushMode.active {
+  background: var(--excel-green);
+  border-color: var(--excel-green-dark);
+  color: #ffffff;
+  font-weight: 800;
+  box-shadow: 0 0 0 2px rgba(16, 124, 65, 0.22);
+}
+
 .rb-btn.primary-tint {
   background: var(--excel-green-light);
   border-color: #86efac;
@@ -765,6 +773,15 @@ button, input, select, textarea {
   cursor: cell;
 }
 
+.grid-viewport.brush-mode-active .day-cell {
+  cursor: pointer;
+}
+
+.grid-viewport.brush-mode-active .day-cell:hover {
+  outline: 2px dashed var(--excel-green);
+  outline-offset: -2px;
+}
+
 .day-cell.is-weekend-col {
   background-color: #fffbeb;
 }
@@ -1041,6 +1058,7 @@ tr.totals-footer-row td.sticky-col-2 {
   flex-direction: column;
   gap: 8px;
   z-index: 300;
+  pointer-events: none;
 }
 
 .toast-msg {
