@@ -2,7 +2,9 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#107c41" />
+  <meta name="description" content="نظام الحضور والنبطشيات والسهر الموحد بواجهة إكسيل تفاعلية متجاوبة مع الهاتف والكمبيوتر ومزامنة سحابية تلقائية عبر الأجهزة." />
   <title>نظام الحضور والنبطشيات والسهر الموحد - واجهة إكسيل المتزامنة</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -91,7 +93,7 @@
       <div class="topbar-right">
         <div class="app-badge">
           <span class="app-badge-icon">X</span>
-          <span>شيت الحضور والنبطشيات والسهر</span>
+          <span class="app-badge-text">شيت الحضور والنبطشيات والسهر</span>
         </div>
         <input type="text" id="inpWorkbookTitle" class="workbook-title-input" title="اسم السجل / المصنف" />
         <div id="syncStatusPill" class="sync-pill local" title="اضغط لإعدادات المزامنة السحابية عبر الأجهزة">
@@ -101,9 +103,10 @@
       </div>
 
       <div class="topbar-left">
-        <button type="button" id="btnSyncNow" class="top-btn" title="حفظ ومزامنة الآن (Ctrl+S)">🔄 مزامنة الآن</button>
-        <button type="button" id="btnOpenCloudModal" class="top-btn">☁️ ربط الأجهزة</button>
-        <div id="lblCurrentUser" class="user-chip">👤 مستخدم</div>
+        <button type="button" id="btnToggleMobileTools" class="top-btn mobile-only-btn" aria-expanded="false" title="إظهار أو إخفاء شريط الأدوات">🛠️ الأدوات</button>
+        <button type="button" id="btnSyncNow" class="top-btn" title="حفظ ومزامنة الآن (Ctrl+S)">🔄<span class="hide-on-mobile"> مزامنة الآن</span></button>
+        <button type="button" id="btnOpenCloudModal" class="top-btn" title="ربط الأجهزة السحابي">☁️<span class="hide-on-mobile"> ربط الأجهزة</span></button>
+        <div id="lblCurrentUser" class="user-chip hide-on-mobile">👤 مستخدم</div>
         <button type="button" id="btnLogout" class="top-btn" title="تسجيل الخروج">خروج</button>
       </div>
     </header>
@@ -171,6 +174,7 @@
       <div id="lblCellAddress" class="cell-address-box">B1</div>
       <span class="fx-badge">fx</span>
       <input type="text" id="inpFormulaBar" class="formula-input" placeholder="اكتب قيمة أو رمز يوم (ح، ن، س2، ح+ن، ح+س3) أو معادلة إكسيل مثل =SUM(A1:A5)" />
+      <button type="button" id="btnFormulaCommit" class="formula-commit-btn mobile-only-btn" title="إدخال وحفظ القيمة">✓</button>
       <span id="lblCellHint" class="cell-hint-label">اسم الموظف</span>
     </section>
 
@@ -204,8 +208,8 @@
       <div class="sheet-tabs-bar">
         <div id="sheetTabsList" class="tabs-list"></div>
         <div class="add-sheet-btns">
-          <button type="button" id="btnAddUnifiedSheet" class="rb-btn primary-tint">+ ورقة حضور ونبطشيات وسهر</button>
-          <button type="button" id="btnAddFreeSheet" class="rb-btn">+ ورقة إكسيل حرة</button>
+          <button type="button" id="btnAddUnifiedSheet" class="rb-btn primary-tint">+ <span class="hide-on-mobile">ورقة حضور ونبطشيات وسهر</span><span class="mobile-only-inline">شهر</span></button>
+          <button type="button" id="btnAddFreeSheet" class="rb-btn">+ <span class="hide-on-mobile">ورقة إكسيل حرة</span><span class="mobile-only-inline">حرة</span></button>
         </div>
       </div>
 

@@ -926,6 +926,16 @@
     }
   }
 
+  function setMobileToolsOpen(isOpen) {
+    const ws = $("workspaceScreen");
+    const btn = $("btnToggleMobileTools");
+    if (!ws || !btn) return;
+    ws.classList.toggle("mobile-tools-open", Boolean(isOpen));
+    btn.classList.toggle("active", Boolean(isOpen));
+    btn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    btn.textContent = isOpen ? "🛠️ إخفاء" : "🛠️ الأدوات";
+  }
+
   // ==========================================================================
   // 6. ربط الأحداث والاختصارات وتشغيل النظام
   // ==========================================================================
@@ -941,6 +951,13 @@
       ui.workbook.workbookTitle = $("inpWorkbookTitle").value.trim() || "سجل الحضور والنبطشيات والسهر";
       Sync.scheduleSave(ui.workbook, getActiveSheet());
     });
+
+    if ($("btnToggleMobileTools")) {
+      $("btnToggleMobileTools").addEventListener("click", function () {
+        const ws = $("workspaceScreen");
+        setMobileToolsOpen(!ws.classList.contains("mobile-tools-open"));
+      });
+    }
 
     $("syncStatusPill").addEventListener("click", openCloudModal);
     $("btnOpenCloudModal").addEventListener("click", openCloudModal);
@@ -1198,21 +1215,38 @@
       $("gridViewport").focus({ preventScroll: true });
     });
 
-    // شريط الصيغة (fx)
+    // شريط الصيغة (fx) + زر الحفظ السريع للهاتف
+    function commitFormulaBarInput(fromButton) {
+      const sheet = getActiveSheet();
+      const col = ui.calcCache && ui.calcCache.cols[ui.activeCell.c];
+      if (!sheet || !col) return;
+      if (!col.editable) {
+        showToast("هذه الخلية تُحسب تلقائياً", "info");
+        return;
+      }
+      pushUndoSnapshot();
+      sheet.rows[ui.activeCell.r][col.key] = normalizeTypedValue($("inpFormulaBar").value.trim(), col);
+      renderAll(true);
+      moveSelection(1, 0, false);
+      if (fromButton) {
+        $("inpFormulaBar").blur();
+      } else {
+        $("gridViewport").focus({ preventScroll: true });
+      }
+    }
+
     $("inpFormulaBar").addEventListener("keydown", function (ev) {
       if (ev.key === "Enter") {
         ev.preventDefault();
-        const sheet = getActiveSheet();
-        const col = ui.calcCache && ui.calcCache.cols[ui.activeCell.c];
-        if (sheet && col && col.editable) {
-          pushUndoSnapshot();
-          sheet.rows[ui.activeCell.r][col.key] = normalizeTypedValue($("inpFormulaBar").value.trim(), col);
-          renderAll(true);
-          moveSelection(1, 0, false);
-          $("gridViewport").focus();
-        }
+        commitFormulaBarInput(false);
       }
     });
+
+    if ($("btnFormulaCommit")) {
+      $("btnFormulaCommit").addEventListener("click", function () {
+        commitFormulaBarInput(true);
+      });
+    }
 
     // إضافة أوراق عمل جديدة من الشريط السفلي
     $("btnAddUnifiedSheet").addEventListener("click", function () {
@@ -1281,6 +1315,10 @@
       if (!targetEl) return;
       if (targetEl.classList.contains("inline-cell-editor")) return;
 
+      if ($("workspaceScreen").classList.contains("mobile-tools-open")) {
+        setMobileToolsOpen(false);
+      }
+
       // فحص مقبض التعبئة السريعة (Fill Handle)
       if (targetEl.classList.contains("fill-handle")) {
         ev.preventDefault();
@@ -1296,14 +1334,32 @@
       const td = targetEl.closest("td[data-r][data-c]");
       if (!td) return;
 
-      $("gridViewport").focus({ preventScroll: true });
-
       const r = parseInt(td.dataset.r, 10);
       const c = parseInt(td.dataset.c, 10);
+      const wasAlreadyActiveSingle = (
+        !ui.inlineEditing &&
+        ui.brushStamp === null &&
+        ui.activeCell.r === r &&
+        ui.activeCell.c === c &&
+        ui.selection.r1 === r &&
+        ui.selection.r2 === r &&
+        ui.selection.c1 === c &&
+        ui.selection.c2 === c
+      );
 
       if (ui.inlineEditing && (ui.inlineEditing.r !== r || ui.inlineEditing.c !== c)) {
         commitInlineEditIfAny(true);
       }
+
+      // على شاشات اللمس (الهاتف): النقر الثاني على نفس الخلية المحددة يفتح التحرير المباشر فوراً مثل Excel Mobile
+      const isTouchPointer = Boolean(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+      if (isTouchPointer && wasAlreadyActiveSingle && !ev.shiftKey) {
+        ev.preventDefault();
+        startInlineEdit(r, c);
+        return;
+      }
+
+      $("gridViewport").focus({ preventScroll: true });
 
       if (ev.shiftKey && ui.brushStamp === null) {
         ui.selection.r2 = r;
